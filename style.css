@@ -1,0 +1,131 @@
+
+@font-face {
+  font-family: "f8bit";
+  src: url("fonts/f8bit.woff") format('woff');
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	background-color: #000;
+	color: #fff;
+	font-family: "f8bit";
+	font-size: 0.8em;
+}
+
+div.log {
+	font: 0.5em Monospace;
+	color: #fff;
+	z-index: 100;
+	position: fixed;
+	left: 10px;
+	bottom: 10px;
+}
+div.log p {
+	margin: 0;
+}
+
+.full {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100%; /* 100vh includes the address bar height on Chrome@Android */
+	box-sizing: border-box;
+}
+.center {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+}
+
+div#ctrl {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+}
+div#ctrl > div#roll {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	flex: 1;
+}
+div#ctrl > div#thrust {
+	flex: 1;
+}
+div#ctrl div#roll_r {
+	flex: 1;
+}
+div#ctrl div#roll_l {
+	flex: 1;
+}
+
+div.menu {
+	flex-direction: column;
+}
+@keyframes menuitem {
+	0%   {background-color: #008;}
+	100% {background-color: #00d;}
+}
+div.menu > div.menuitem {
+	width: 100%;
+	margin: 1em 0;
+	padding: 0.6em 0;
+	font-weight: bold;
+	text-align: center;
+	cursor: pointer;
+}
+div.menu > div.menuitem {
+	background-color: #004;
+	animation: menuitem 0.5s linear 0s infinite alternate;
+	animation-iteration-count: infinite;
+}
+div.menu > div.menuitem > span {
+	background: -webkit-linear-gradient(#de2a2a, #dec32a, #de2a2a);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	-webkit-user-select: none;
+	user-select: none;
+	cursor: pointer;
+}
+div.menu > div.menusep {
+	width: 100%;
+	border-top: 1px dashed #60eb44;
+	margin: 0.3em 0;
+}
+div.menu div.button {
+	background: -webkit-linear-gradient(#107b85, #105a85);
+	border: 2px solid #dfebf2;
+	border-radius: 0.2em;
+	padding: 0.9em;
+	margin: 2em;
+	font-weight: bold;
+	color: #dfebf2;
+}
+
+div.menu > div.menuheader {
+	margin-bottom: 3em;
+}
+
+@keyframes gametitle {
+	0%   {text-shadow: 0 0 0.5em #60eb44;}
+	100% {text-shadow: 0 0 1.0em #33f50c;}
+}
+div.menu > div.menuheader > div.gametitle {
+	font-size: 3em;
+	color: #46a832;
+	text-align: center;
+	margin-bottom: 1em;
+	text-shadow: 0 0 0.5em #60eb44;
+	animation: gametitle 0.7s linear 0.1s infinite alternate;
+	animation-iteration-count: infinite;
+}
+
+div.menu > div.menuheader > div.subtitle {
+	font-size: 0.7em;
+	color: #f7ff57;
+	text-align: center;
+	margin-bottom: 0.5em;
+}
