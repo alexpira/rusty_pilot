@@ -7,7 +7,7 @@ macro_rules! dlog {
 	( $text:expr ) => {
 		let el = document().create_element("p").unwrap();
 		el.set_text_content(Some($text));
-        let csl = document().get_element_by_id("console").unwrap();
+		let csl = document().get_element_by_id("console").unwrap();
 		let _ = csl.append_child(&el);
 		while csl.child_element_count() > 60 {
 			csl.first_element_child().unwrap().remove();
