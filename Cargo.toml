@@ -22,7 +22,7 @@ features = [
 #  'DomRect',
   'HtmlCanvasElement',
   'Window',
-  'MouseEvent', 'TouchEvent', 'TouchList', 'Touch', 'KeyboardEvent', 'KeyEvent',
+  'MouseEvent', 'PointerEvent', 'TouchEvent', 'TouchList', 'Touch', 'KeyboardEvent', 'KeyEvent',
   'OffscreenCanvas', 'OffscreenCanvasRenderingContext2d', 'ImageBitmap', 'CanvasPattern',
 ]
 

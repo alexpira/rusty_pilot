@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use crate::view::gameview::GameView;
 use crate::levels::GameData;
+use crate::rand::Random;
 use crate::common::*;
 use crate::attach;
 
@@ -16,11 +17,12 @@ pub struct MenuViewData {
 	fuel: u32,
 	thrust: u32,
 	gravity: u32,
-	friction: u32
+	friction: u32,
 }
 
 pub struct MenuView {
     root: HtmlElement,
+    rng: Rc<RefCell<Random>>,
 	data: Rc<RefCell<MenuViewData>>
 }
 
@@ -28,6 +30,7 @@ impl MenuView {
     pub fn new(root: HtmlElement, data: MenuViewData) -> Self {
         Self {
             root: root,
+            rng: Rc::new(RefCell::new(Random::new())),
 			data: Rc::new(RefCell::new(data)),
         }
     }
@@ -59,6 +62,9 @@ impl MenuView {
 				<div id=\"fuel\" class=\"menuitem\">{}</div>\
 				<div id=\"thrust\" class=\"menuitem\">{}</div>\
 				<div class=\"buttons\">\
+					<div id=\"rand\" class=\"button\">\
+						RANDOM\
+					</div>\
 					<div id=\"play\" class=\"button\">\
 						PLAY\
 					</div>\
@@ -88,6 +94,16 @@ impl MenuView {
 			thrust: 1u32,
 		}
 	}
+	pub fn rand_data(rng: &mut Random) -> MenuViewData {
+		MenuViewData {
+			map: rng.rand(8) as u32,
+			gravity: rng.rand(5) as u32,
+			friction: rng.rand(5) as u32,
+			asteroids: rng.rand(5) as u32,
+			fuel: rng.rand(4) as u32,
+			thrust: rng.rand(4) as u32,
+		}
+	}
 
 	fn label_map(v: u32) -> &'static str {
 		match v {
@@ -98,6 +114,7 @@ impl MenuView {
 			4 => "<span>Map: SHIFTED</span>",
 			5 => "<span>Map: CHOICE</span>",
 			6 => "<span>Map: UP</span>",
+			7 => "<span>Map: HUGE</span>",
 			_ => "<span>Map: SIMPLE</span>",
 		}
 	}
@@ -150,14 +167,13 @@ impl MenuView {
 		}
 	}
 
-
 	fn setup_events(&self, evt: &str) {
 		let data = Rc::clone(&self.data);
 		attach!("map", evt, move |event: web_sys::Event| {
 			event.prevent_default();
 			let mut data = data.borrow_mut();
 			let v = (*data).map;
-			let v = (v + 1) % 7;
+			let v = (v + 1) % 8;
 			(*data).map = v;
 			elem::<HtmlElement>("map").set_inner_html(Self::label_map(v));
         });
@@ -213,6 +229,21 @@ impl MenuView {
         });
 
 		let data = Rc::clone(&self.data);
+        let rng = Rc::clone(&self.rng);
+		attach!("rand", evt, move |event: web_sys::Event| {
+			event.prevent_default();
+			let mut rng = rng.borrow_mut();
+            data.replace(Self::rand_data(&mut rng));
+            let data = data.borrow();
+			elem::<HtmlElement>("map").set_inner_html(Self::label_map(data.map));
+			elem::<HtmlElement>("asteroids").set_inner_html(Self::label_asteroids(data.asteroids));
+			elem::<HtmlElement>("fuel").set_inner_html(Self::label_fuel(data.fuel));
+			elem::<HtmlElement>("thrust").set_inner_html(Self::label_thrust(data.thrust));
+			elem::<HtmlElement>("gravity").set_inner_html(Self::label_gravity(data.gravity));
+			elem::<HtmlElement>("friction").set_inner_html(Self::label_friction(data.friction));
+        });
+
+		let data = Rc::clone(&self.data);
 		attach!("play", evt, move |event: web_sys::Event| {
 			event.prevent_default();
 			let data = data.borrow();
@@ -229,6 +260,7 @@ impl MenuView {
 				4 => GameData::shifted(ast, th, fuel, gravity, fr),
 				5 => GameData::choice(ast, th, fuel, gravity, fr),
 				6 => GameData::up(ast, th, fuel, gravity, fr),
+				7 => GameData::huge(ast, th, fuel, gravity, fr),
 				_ => GameData::simple(ast, th, fuel, gravity, fr),
 			};
 

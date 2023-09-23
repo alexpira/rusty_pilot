@@ -3,12 +3,13 @@ use crate::common::*;
 use crate::rand::Random;
 use crate::levels::GameData;
 use crate::geom::{Trig,Point,collide,inside_rect};
+use wasm_bindgen::JsValue;
 
 pub struct Wind {
 	shape: Vec<Point>,
 	power: Fpt,
 	orientation: i32,
-	accel: Option<Point>
+	accel: Option<Point>,
 }
 
 impl Wind {
@@ -17,7 +18,7 @@ impl Wind {
 			shape: shape,
 			power: power,
 			orientation: orientation,
-			accel: None
+			accel: None,
 		}
 	}
 	pub fn shape(&self) -> &Vec<Point> { &self.shape }
@@ -40,7 +41,7 @@ impl Wind {
 pub struct Particle {
 	pos: Point,
 	dir: Point,
-	col: String,
+	col: JsValue,
 	life: u32
 }
 
@@ -49,7 +50,7 @@ impl Particle {
 		Self {
 			pos: pos,
 			dir: dir,
-			col: col.to_string(),
+			col: JsValue::from_str(col),
 			life: 20
 		}
 	}
@@ -69,7 +70,7 @@ impl Particle {
 		}
 		return (self.life as f64) / 10.0;
 	}
-	pub fn color(&self) -> &str {
+	pub fn color(&self) -> &JsValue {
 		&self.col
 	}
 	pub fn position(&self) -> &Point {
@@ -142,6 +143,7 @@ pub struct GameEngine {
 	rng: Random,
 	trig: Trig,
 	draw_step: u32,
+	viewport_pos: Option<Point>,
 	config: GameData
 }
 impl GameEngine {
@@ -163,6 +165,10 @@ impl GameEngine {
 			blownup: false,
 			trig: Trig::new(),
 			draw_step: 0u32,
+			viewport_pos: match &cfg.viewport_pos0 {
+				None => None,
+				Some(x) => Some(x.clone())
+			},
 			config: cfg
 		};
 		for _ in 0..rv.config.num_asteroids {
@@ -347,6 +353,7 @@ impl GameEngine {
 			p.move_step();
 		}
 		self.particles.retain(|p| { !p.finished() });
+		self.reposition_viewport();
 	}
 
 	pub fn remap_ship(&self, p: &Point) -> Point {
@@ -408,7 +415,7 @@ impl GameEngine {
 				vdist * self.trig.sin(vgen),
 				vdist * self.trig.cos(vgen)
 			));
-			vgen += self.rng.nextbits(6) as i32;
+			vgen += self.rng.nextbits(5) as i32 + 30;
 		}
 		let p = Point::new(
 			self.config.asteroid_pos0.x() + self.rng.rand(self.config.asteroid_area.x() as i32) as Fpt,
@@ -428,13 +435,65 @@ impl GameEngine {
 		}
 	}
 	pub fn finished(&self) -> bool {
-		(self.blownup && (self.particles.len() == 0)) || self.landed
+		(self.blownup && (self.particles.len() == 0)) || self.stuck() || self.landed
+	}
+	fn stuck(&self) -> bool {
+		!self.landed && !self.blownup && self.fuel == 0u32 && self.speed.is_zero() && self.config.gravity.is_zero()
 	}
 	pub fn area_width(&self) -> Fpt {
 		self.config.area.x()
 	}
 	pub fn area_height(&self) -> Fpt {
 		self.config.area.y()
+	}
+	pub fn scrollable(&self) -> bool {
+		match &self.config.viewport {
+			Some(_) => true,
+			None => false
+		}
+	}
+	fn reposition_viewport(&mut self) {
+		if ! self.scrollable() {
+			return;
+		}
+		let margin = 150.0;
+
+		let aw = self.config.area.x();
+		let ah = self.config.area.y();
+		let vpw = match &self.config.viewport { Some(v) => v.x(), None => return };
+		let vph = match &self.config.viewport { Some(v) => v.y(), None => return };
+		let vpx = match &self.viewport_pos { Some(v) => v.x(), None => 0.0 };
+		let vpy = match &self.viewport_pos { Some(v) => v.y(), None => 0.0 };
+
+		let vpx = f64::min(vpx, self.pos.x() - margin);
+		let vpx = f64::max(vpx + vpw, self.pos.x() + margin) - vpw;
+		let vpx = f64::max(vpx, -30.0);
+		let vpx = f64::min(vpx, aw - vpw + 30.0);
+
+		let vpy = f64::min(vpy, self.pos.y() - margin);
+		let vpy = f64::max(vpy + vph, self.pos.y() + margin) - vph;
+		let vpy = f64::max(vpy, -30.0);
+		let vpy = f64::min(vpy, ah - vph + 30.0);
+		self.viewport_pos = Some(Point::new(vpx, vpy));
+	}
+
+	pub fn viewport_width(&self) -> Fpt {
+		match &self.config.viewport {
+			Some(v) => v.x(),
+			None => self.config.area.x()
+		}
+	}
+	pub fn viewport_height(&self) -> Fpt {
+		match &self.config.viewport {
+			Some(v) => v.y(),
+			None => self.config.area.y()
+		}
+	}
+	pub fn viewport_pos(&self) -> Point {
+		match &self.viewport_pos {
+			Some(v) => v.clone(),
+			None => Point::new(0.0, 0.0)
+		}
 	}
 
 	pub fn block_alert(&self) -> bool {

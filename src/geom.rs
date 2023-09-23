@@ -62,6 +62,11 @@ impl Point {
 	pub fn x(&self) -> Fpt { self.x }
 	pub fn y(&self) -> Fpt { self.y }
 
+	pub fn is_zero(&self) -> bool {
+		self.x < 0.0001 && self.x > -0.0001 &&
+		self.y < 0.0001 && self.y > -0.0001
+	}
+
 	#[allow(dead_code)]
 	pub fn length2(&self) -> Fpt {
 		self.x*self.x + self.y*self.y

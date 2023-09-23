@@ -31,7 +31,6 @@ macro_rules! shape {
 			$ctx.set_stroke_style(&JsValue::from_str($col));
 			path!($ctx, $vert);
 			$ctx.fill();
-			$ctx.stroke();
 		}
 	}
 }
@@ -84,9 +83,7 @@ impl GameView {
 		}
 	}
 
-	fn draw(engine: &GameEngine, arrow: &ImageBitmap, opacity: i32) {
-		let canvas = canvas();
-
+	fn draw(canvas: &web_sys::HtmlCanvasElement, engine: &GameEngine, arrow: &ImageBitmap, opacity: i32) {
 		let context = canvas
 			.get_context("2d")
 			.unwrap()
@@ -98,8 +95,32 @@ impl GameView {
 			let _ = elem::<HtmlElement>("game").set_attribute("style", format!("opacity: {:.2}; {}", opacity as Fpt / 100.0, GAME_DIV_STYLE).as_str());
 		}
 
+		let cw = canvas.width().into();
+		let ch = canvas.height().into();
+		let _ = context.reset_transform();
 		context.set_fill_style(&JsValue::from_str("#000000"));
-		context.fill_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
+		context.fill_rect(0.0, 0.0, cw, ch);
+
+		if engine.scrollable() {
+			let vpos = engine.viewport_pos();
+
+			if vpos.x() < 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(0,0), pt!(-vpos.x(),0), pt!(-vpos.x(),ch), pt!(0,ch)]);
+			}
+			if vpos.y() < 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(0,0), pt!(0,-vpos.y()), pt!(cw,-vpos.y()), pt!(cw,0)]);
+			}
+			let out = vpos.x() + cw - engine.area_width();
+			if out > 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(cw-out,0), pt!(cw,0), pt!(cw,ch), pt!(cw-out,ch)]);
+			}
+			let out = vpos.y() + ch - engine.area_height();
+			if out > 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(0,ch-out), pt!(0,ch), pt!(cw,ch), pt!(cw,ch-out)]);
+			}
+
+			let _ = context.translate(-vpos.x(), -vpos.y());
+		}
 
 		let step = engine.get_step();
 		engine.iter_winds(|w,trig| {
@@ -140,15 +161,15 @@ impl GameView {
 		shape!(context, "#8fffc3", engine.land_shape());
 		engine.iter_part(|p| {
 			context.set_global_alpha(p.alpha());
-			context.set_fill_style(&JsValue::from_str(p.color()));
+			context.set_fill_style(p.color());
 			let pos = p.position();
 			context.fill_rect(pos.x()-1.0, pos.y()-1.0, 2.0, 2.0);
 		});
 		context.set_global_alpha(1.0);
 
 		/*
-		let areaw = engine.area_width();
-		let areah = engine.area_height();
+		let areaw = engine.viewport_width();
+		let areah = engine.viewport_height();
 		let hud_y0 : f64 = areah - 15.0;
 		let hud_y1 : f64 = areah - 5.0;
 		let hud_x0 : f64 = 30.0;
@@ -238,8 +259,8 @@ impl GameView {
 		let sheight = window().inner_height().unwrap().as_f64().unwrap() as u32 - 6;
 
 		let eng = (*self.engine).borrow();
-		let engw = eng.area_width();
-		let engh = eng.area_height();
+		let engw = eng.viewport_width();
+		let engh = eng.viewport_height();
 		let widthstep: u32 = (engw / 10.0) as u32;
 		let heightstep: u32 = (engh / 10.0) as u32;
 		let ratio = min(swidth / widthstep, sheight / heightstep);
@@ -310,6 +331,7 @@ impl GameView {
 		attach!("keyup", keyfn);
 	}
 
+	#[allow(dead_code)]
 	fn setup_mouse_events(&self) {
 		elem::<HtmlElement>("ctrl").request_pointer_lock();
 		// let _ = js_sys::eval("document.getElementById('ctrl').requestPointerLock({unadjustedMovement: true})");
@@ -343,6 +365,120 @@ impl GameView {
 		attach!("ctrl", "mouseup", mousefn);
 	}
 
+	fn setup_pointer_events(&self) {
+		elem::<HtmlElement>("ctrl").request_pointer_lock();
+
+		let swidth = window().inner_width().unwrap().as_f64().unwrap() as u32;
+		let touches : Rc<RefCell<HashMap<i32,i32>>> = Rc::new(RefCell::new(HashMap::new()));
+
+		let vsplit = (swidth / 2) as i32;
+
+		let mut ptcache : Option<bool> = None;
+		let mut is_touch = move |ptype: &String| {
+			// "mouse" | "pen" | "touch"
+			*ptcache.get_or_insert_with(|| { ptype.len() == 5 && ptype.chars().next().unwrap() == 't' })
+		};
+
+		let open_pointer_fn = |event: &web_sys::PointerEvent| {
+			event.prevent_default();
+			event.stop_propagation();
+			let evt = event.type_();
+			let id = event.pointer_id();
+			let x = event.page_x();
+			let ptype = event.pointer_type();
+			// dlog!(format!("{} {} {} {:.2} {:.2}", event.pointer_type(), evt.as_str(), event.pointer_id(), event.page_x(), event.page_y()).as_str());
+			/* event.get_coalesced_events().for_each(&mut |jev, ix, ar| {
+				let ce = jev.dyn_into::<web_sys::PointerEvent>().map_err(|_| ()).unwrap();
+				let evt = ce.type_();
+				dlog!(format!("{} - {} {} {} {} {}", ix, evt.as_str(), ce.pointer_id(), ce.page_x(), ce.movement_x(), ce.movement_y()).as_str());
+			}); */
+
+			(evt,id,x,ptype)
+		};
+
+		let engref = Rc::clone(&self.engine);
+		let touchref = Rc::clone(&touches);
+		let ptrmovefn = move |event: web_sys::PointerEvent| {
+			let (_,id,x,pt) = open_pointer_fn(&event);
+			let mut touches = (*touchref).borrow_mut();
+			let mut engine = (*engref).borrow_mut();
+			let mut delta : i32 = 0;
+			let touch = is_touch(&pt);
+			if x >= vsplit {
+				if touch {
+					delta += event.movement_y();
+				} else {
+					let mx = event.movement_x();
+					let my = event.movement_y();
+					delta = if i32::abs(mx) > i32::abs(my) { mx } else { my };
+					delta = if i32::abs(delta) <= 20 { delta } else if delta < 0 { -20 } else { 20 };
+				}
+			}
+			if delta != 0 {
+				engine.rotate(delta);
+			}
+			if touch {
+				touches.insert(id, x);
+				engine.set_thrust(touches.values().any(|e| { e < &vsplit }));
+			}
+		};
+
+		let engref = Rc::clone(&self.engine);
+		let touchref = Rc::clone(&touches);
+		let ptrstartfn = move |event: web_sys::PointerEvent| {
+			let (_,id,x,pt) = open_pointer_fn(&event);
+			let mut touches = (*touchref).borrow_mut();
+			let mut engine = (*engref).borrow_mut();
+			if is_touch(&pt) {
+				engine.set_block_alert(false);
+				touches.insert(id, x);
+				engine.set_thrust(touches.values().any(|e| { e < &vsplit }));
+			} else {
+				engine.set_thrust(true);
+			}
+		};
+
+		let engref = Rc::clone(&self.engine);
+		let touchref = Rc::clone(&touches);
+		let ptrendfn = move |event: web_sys::PointerEvent| {
+			let (_,id,_,pt) = open_pointer_fn(&event);
+			let mut touches = (*touchref).borrow_mut();
+			let mut engine = (*engref).borrow_mut();
+			if is_touch(&pt) {
+				touches.remove(&id);
+				engine.set_thrust(touches.values().any(|e| { e < &vsplit }));
+			} else {
+				engine.set_thrust(false);
+			}
+		};
+
+		let engref = Rc::clone(&self.engine);
+		let touchref = Rc::clone(&touches);
+		let ptrcancelfn = move |event: web_sys::PointerEvent| {
+			let (_,_,_,pt) = open_pointer_fn(&event);
+			let mut touches = (*touchref).borrow_mut();
+			let mut engine = (*engref).borrow_mut();
+			if is_touch(&pt) {
+				engine.set_block_alert(true);
+				touches.clear();
+				engine.set_thrust(touches.values().any(|e| { e < &vsplit }));
+			}
+		};
+
+		attach!("ctrl", "pointermove", ptrmovefn);
+
+//		attach!("ctrl", "pointerenter", ptrstartfn.clone());
+		attach!("ctrl", "pointerdown", ptrstartfn);
+
+//		attach!("ctrl", "pointerleave", ptrendfn.clone());
+//		attach!("ctrl", "pointerout", ptrendfn.clone());
+//		attach!("ctrl", "pointerover", ptrendfn.clone());
+		attach!("ctrl", "pointerup", ptrendfn);
+
+		attach!("ctrl", "pointercancel", ptrcancelfn);
+	}
+
+	#[allow(dead_code)]
 	fn setup_touch_events(&self) {
 		let swidth = window().inner_width().unwrap().as_f64().unwrap() as u32;
 		let vsplit = (swidth / 2) as i32;
@@ -402,87 +538,65 @@ impl GameView {
 		attach!("ctrl", "touchstart", touchfn.clone());
 		attach!("ctrl", "touchcancel", touchfn.clone());
 		attach!("ctrl", "touchend", touchfn);
-
-/*		let ptrfn = move |event: web_sys::PointerEvent| {
-			event.prevent_default();
-			event.stop_propagation();
-			dlog!(format!("{} {} {:.2} {:.2}", event.type_().as_str(), event.pointer_id(), event.page_x(), event.page_y()).as_str());
-		};
-		attach!("ctrl", "pointerover", ptrfn.clone());
-		attach!("ctrl", "pointerenter", ptrfn.clone());
-		attach!("ctrl", "pointerdown", ptrfn.clone());
-		attach!("ctrl", "pointermove", ptrfn.clone());
-		attach!("ctrl", "pointercancel", ptrfn.clone());
-		attach!("ctrl", "pointerout", ptrfn.clone());
-		attach!("ctrl", "pointerleave", ptrfn.clone()); */
 	}
 
 	fn setup_triggers(&mut self) {
-		let fading = Rc::new(RefCell::new(-1));
+		const ENGINE_STEP_MS : u64 = 25u64;
 		let animf = Rc::new(RefCell::new(None));
 		let animfc = animf.clone();
+		let rootc = self.root.clone();
+		let config = self.config.clone();
 
-		let faderef = fading.clone();
 		let engref = Rc::clone(&self.engine);
 		let arrow = Rc::clone(&self.arrow);
-		*animfc.borrow_mut() = Some(Closure::new(move || {
-			let engine = (*engref).borrow();
-			let fading = (*faderef).borrow();
+		let canvas = canvas();
 
-			if *fading > 100 {
-				let _ = animf.borrow_mut().take();
-				return;
+		let mut fading = -1;
+		let mut last_engine_run = js_sys::Date::now() as u64;
+
+		*animfc.borrow_mut() = Some(Closure::new(move || {
+			let mut engine = (*engref).borrow_mut();
+			let now = js_sys::Date::now() as u64;
+
+			if engine.block_alert() {
+				last_engine_run = now;
+			} else {
+				let target_step = now - ENGINE_STEP_MS;
+				while last_engine_run < target_step {
+					last_engine_run += ENGINE_STEP_MS;
+					if fading < 0 && engine.finished() {
+						fading = 0;
+					} else if fading > 100 {
+						let _ = animf.borrow_mut().take();
+						Self::cleanup();
+
+						let _ = elem::<HtmlElement>("game").set_attribute("style",GAME_DIV_STYLE);
+						rootc.set_inner_html("<div id=\"game\" class=\"full center\" style=\"z-index: 0; background-color: #000;\">");
+						let view = MenuView::new(target_elem(), config.clone());
+						view.show();
+
+						return;
+					} else if fading >= 0 {
+						fading += 1;
+					}
+
+					engine.move_step();
+				}
 			}
-			Self::draw(&engine, &arrow, 100 - *fading);
+
+			Self::draw(&canvas, &engine, &arrow, 100 - fading);
 			request_animation_frame(animf.borrow().as_ref().unwrap());
 		}));
 
 		request_animation_frame(animfc.borrow().as_ref().unwrap());
-
-
-		let timer: Rc<RefCell<Option<i32>>> = Rc::new(RefCell::new(None));
-
-		let faderef = fading.clone();
-		let engref = Rc::clone(&self.engine);
-		let rootc = self.root.clone();
-		let timerc = timer.clone();
-		let config = self.config.clone();
-		let process = Closure::<dyn Fn()>::new(move || {
-			let mut engine = (*engref).borrow_mut();
-			if engine.block_alert() {
-				return;
-			}
-			let mut fading = (*faderef).borrow_mut();
-
-			if *fading < 0 && engine.finished() {
-				*fading = 0;
-			} else if *fading > 100 {
-				window().clear_interval_with_handle(timerc.borrow().unwrap());
-				Self::cleanup();
-				let _ = elem::<HtmlElement>("game").set_attribute("style",GAME_DIV_STYLE);
-				rootc.set_inner_html("<div id=\"game\" class=\"full center\" style=\"z-index: 0; background-color: #000;\">");
-				let view = MenuView::new(target_elem(), config.clone());
-				view.show();
-
-				return;
-			} else if *fading >= 0 {
-				*fading += 1;
-			}
-
-			engine.move_step();
-		});
-		if let Ok(t_handle) = window().set_interval_with_callback_and_timeout_and_arguments_0(process.as_ref().unchecked_ref(),25) {
-			*timer.borrow_mut() = Some(t_handle);
-		}
-
-		process.forget();
 	}
 
 	pub fn show(&mut self) {
 		self.setup_html();
 		self.setup_keyboard_events();
-		self.setup_mouse_events();
-		self.setup_touch_events();
+		// self.setup_mouse_events();
+		// self.setup_touch_events();
+		self.setup_pointer_events();
 		self.setup_triggers();
 	}
 

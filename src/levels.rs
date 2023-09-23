@@ -7,6 +7,8 @@ use crate::engine::Wind;
 
 pub struct GameData {
 	pub area: Point,
+	pub viewport: Option<Point>,
+	pub viewport_pos0: Option<Point>,
 	pub pos0: Point,
 	pub speed0: Point,
 	pub target_y: Fpt,
@@ -52,6 +54,17 @@ impl GameData {
 			_ => 3
 		}
 	}
+	fn ast_huge(ast: u32) -> u32 {
+		match ast {
+			0 => 0,
+			1 => 1,
+			2 => 5,
+			3 => 9,
+			4 => 12,
+			_ => 5
+		}
+	}
+
 	fn fuel_default(fuel: u32) -> u32 {
 		match fuel {
 			0 => 150,
@@ -112,6 +125,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(160.0, 50.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 600.0,
@@ -133,65 +147,6 @@ impl GameData {
 		}
 	}
 
-	pub fn up(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
-		let wi = 360;
-		let w = wi as Fpt;
-		let h = 700 as Fpt;
-		let na = Self::ast_default(ast);
-		let f = Self::fuel_increased(fuel);
-		let fr = Self::friction_default(fric);
-		let th = Self::thrust_default(thrust);
-		let grav = Self::gravity_default(gravity);
-
-		Self {
-			area: Point::new(w,h),
-			pos0: Point::new(180.0, 650.0),
-			speed0: Point::new(0.0, 0.0),
-			target_y: 100.0,
-			target_x0: 150.0,
-			target_x1: 210.0,
-			num_asteroids: na,
-			asteroid_pos0: Point::new(0.0, 0.0),
-			asteroid_area: Point::new(w, 580.0),
-			levelling_rot: 15,
-			levelling_speed_x: 3.5,
-			levelling_speed_y: 2.5,
-			initial_fuel: f,
-			full_fuel: max(f,750) as Fpt,
-			thrust_pow: th,
-			gravity: Point::new(0.0, 0.06 * grav),
-			friction: fr,
-			winds: vec!(),
-			walls: vec!(vec!(
-				pt!(20,40),
-				pt!(50,50),
-				pt!(20,60)
-			),vec!(
-				pt!(340,40),
-				pt!(310,50),
-				pt!(340,60)
-			),
-
-			vec!( pt!(80,160), pt!(90,130), pt!(100,160) ),
-			vec!( pt!(260,160), pt!(270,130), pt!(280,160) ),
-
-			vec!( pt!(20,260), pt!(30,230), pt!(40,260) ),
-			vec!( pt!(170,260), pt!(180,230), pt!(190,260) ),
-			vec!( pt!(320,260), pt!(330,230), pt!(340,260) ),
-
-			vec!( pt!(80,360), pt!(90,330), pt!(100,360) ),
-			vec!( pt!(260,360), pt!(270,330), pt!(280,360) ),
-
-			vec!( pt!(20,460), pt!(30,430), pt!(40,460) ),
-			vec!( pt!(170,460), pt!(180,430), pt!(190,460) ),
-			vec!( pt!(320,460), pt!(330,430), pt!(340,460) ),
-
-			vec!( pt!(80,560), pt!(90,530), pt!(100,560) ),
-			vec!( pt!(260,560), pt!(270,530), pt!(280,560) ),
-			),
-		}
-	}
-
 	pub fn shifted(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
 		let wi = 320;
 		let w = wi as Fpt;
@@ -204,6 +159,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(160.0, 50.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 600.0,
@@ -258,6 +214,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(40.0, 30.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 650.0,
@@ -325,6 +282,10 @@ impl GameData {
 		}
 	}
 
+	fn pillar(x:u32, y:u32, sz:u32) -> Vec<Point> {
+		vec!(pt!(x-sz,y),pt!(x,y-sz),pt!(x+sz,y),pt!(x,y+sz))
+	}
+
 	pub fn windy_pillars(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
 		let wi = 300;
 		let w = wi as Fpt;
@@ -337,6 +298,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(w / 2.0, 30.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 650.0,
@@ -359,22 +321,11 @@ impl GameData {
 						pt!(w,450),
 						pt!(0,450)
 					),0.04,0)),
-			walls: vec!(vec!(
-				pt!(150,310),
-				pt!(180,340),
-				pt!(150,370),
-				pt!(120,340)
-			),vec!(
-				pt!(80,410),
-				pt!(110,440),
-				pt!(80,470),
-				pt!(50,440)
-			),vec!(
-				pt!(220,410),
-				pt!(250,440),
-				pt!(220,470),
-				pt!(190,440)
-			))
+			walls: vec!(
+				Self::pillar(150,340,30),
+				Self::pillar(80,440,30),
+				Self::pillar(220,440,30)
+			)
 		}
 	}
 
@@ -390,6 +341,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(w / 2.0, 30.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 600.0,
@@ -448,6 +400,7 @@ impl GameData {
 
 		Self {
 			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
 			pos0: Point::new(w / 2.0, 30.0),
 			speed0: Point::new(0.0, 0.0),
 			target_y: 660.0,
@@ -508,6 +461,125 @@ impl GameData {
 			))
 		}
 	}
+
+	pub fn up(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
+		let wi = 360;
+		let w = wi as Fpt;
+		let h = 700 as Fpt;
+		let na = Self::ast_default(ast);
+		let f = Self::fuel_increased(fuel);
+		let fr = Self::friction_default(fric);
+		let th = Self::thrust_default(thrust);
+		let grav = Self::gravity_default(gravity);
+
+		Self {
+			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
+			pos0: Point::new(180.0, 650.0),
+			speed0: Point::new(0.0, 0.0),
+			target_y: 100.0,
+			target_x0: 150.0,
+			target_x1: 210.0,
+			num_asteroids: na,
+			asteroid_pos0: Point::new(0.0, 0.0),
+			asteroid_area: Point::new(w, 580.0),
+			levelling_rot: 15,
+			levelling_speed_x: 3.5,
+			levelling_speed_y: 2.5,
+			initial_fuel: f,
+			full_fuel: max(f,750) as Fpt,
+			thrust_pow: th,
+			gravity: Point::new(0.0, 0.06 * grav),
+			friction: fr,
+			winds: vec!(),
+			walls: vec!(vec!(
+				pt!(20,40),
+				pt!(50,50),
+				pt!(20,60)
+			),vec!(
+				pt!(340,40),
+				pt!(310,50),
+				pt!(340,60)
+			),
+
+			vec!( pt!(80,160), pt!(90,130), pt!(100,160) ),
+			vec!( pt!(260,160), pt!(270,130), pt!(280,160) ),
+
+			vec!( pt!(20,260), pt!(30,230), pt!(40,260) ),
+			vec!( pt!(170,260), pt!(180,230), pt!(190,260) ),
+			vec!( pt!(320,260), pt!(330,230), pt!(340,260) ),
+
+			vec!( pt!(80,360), pt!(90,330), pt!(100,360) ),
+			vec!( pt!(260,360), pt!(270,330), pt!(280,360) ),
+
+			vec!( pt!(20,460), pt!(30,430), pt!(40,460) ),
+			vec!( pt!(170,460), pt!(180,430), pt!(190,460) ),
+			vec!( pt!(320,460), pt!(330,430), pt!(340,460) ),
+
+			vec!( pt!(80,560), pt!(90,530), pt!(100,560) ),
+			vec!( pt!(260,560), pt!(270,530), pt!(280,560) ),
+			),
+		}
+	}
+	pub fn huge(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
+		let wi = 640;
+		let w = wi as Fpt;
+		let h = 1280 as Fpt;
+		let na = Self::ast_huge(ast);
+		let f = Self::fuel_increased(fuel);
+		let fr = Self::friction_default(fric);
+		let th = Self::thrust_default(thrust);
+		let grav = Self::gravity_default(gravity);
+
+		Self {
+			area: Point::new(w,h),
+			viewport: Some(pt!(320, 640)),
+			viewport_pos0: Some(pt!(-100,-100)),
+			pos0: Point::new(50.0, 50.0),
+			speed0: Point::new(0.0, 0.0),
+			target_y: 1240.0,
+			target_x0: 500.0,
+			target_x1: 600.0,
+			num_asteroids: na,
+			asteroid_pos0: Point::new(0.0, 120.0),
+			asteroid_area: Point::new(w, h - 120.0),
+			levelling_rot: 15,
+			levelling_speed_x: 3.5,
+			levelling_speed_y: 2.5,
+			initial_fuel: f,
+			full_fuel: max(f,750) as Fpt,
+			thrust_pow: th,
+			gravity: Point::new(0.0, 0.06 * grav),
+			friction: fr,
+			winds: vec!(),
+			walls: vec!(
+				Self::pillar( 70,400,25),
+				Self::pillar(170,400,25),
+				Self::pillar(270,400,25),
+				Self::pillar(370,400,25),
+				Self::pillar(470,400,25),
+				Self::pillar(570,400,25),
+
+				Self::pillar( 20,600,20),
+				Self::pillar(120,600,20),
+				Self::pillar(220,600,20),
+				Self::pillar(320,600,20),
+				Self::pillar(420,600,20),
+				Self::pillar(520,600,20),
+				Self::pillar(620,600,20),
+
+				Self::pillar( 70,800,25),
+				Self::pillar(170,800,25),
+				Self::pillar(270,800,25),
+				Self::pillar(370,800,25),
+				Self::pillar(470,800,25),
+				Self::pillar(570,800,25),
+
+
+			)
+		}
+	}
+
 
 }
 

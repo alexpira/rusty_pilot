@@ -21,6 +21,9 @@ div.log {
 	position: fixed;
 	left: 10px;
 	bottom: 10px;
+	user-select: none;
+	pointer-events: none;
+	touch-action: none;
 }
 div.log p {
 	margin: 0;
@@ -33,6 +36,7 @@ div.log p {
 	width: 100vw;
 	height: 100%; /* 100vh includes the address bar height on Chrome@Android */
 	box-sizing: border-box;
+	touch-action: none;
 }
 .center {
 	display: flex;
@@ -45,6 +49,7 @@ div#ctrl {
 	display: flex;
 	flex-direction: row;
 	align-items: stretch;
+	touch-action: none;
 }
 div#ctrl > div#roll {
 	display: flex;
@@ -102,7 +107,9 @@ div.menu div.button {
 	padding: 0.9em;
 	margin: 2em;
 	font-weight: bold;
+	text-align: center;
 	color: #dfebf2;
+	cursor: pointer;
 }
 
 div.menu > div.menuheader {
