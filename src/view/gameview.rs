@@ -12,6 +12,7 @@ use crate::geom::Point;
 use crate::engine::GameEngine;
 use crate::levels::GameData;
 use crate::view::menuview::{MenuView,MenuViewData};
+use crate::rand::Random;
 
 macro_rules! path {
 	($ctx:expr, $vert:expr) => {
@@ -50,7 +51,8 @@ pub struct GameView {
 	engine: Rc<RefCell<GameEngine>>,
 	root: HtmlElement,
 	config: MenuViewData,
-	arrow: Rc<ImageBitmap>
+	arrow: Rc<ImageBitmap>,
+	background: Rc<ImageBitmap>,
 }
 
 impl GameView {
@@ -73,17 +75,49 @@ impl GameView {
 			pt!(1.0,25.0),
 			pt!(14.0,15.0)
 		));
-		let bmp = osc.transfer_to_image_bitmap().unwrap();
+		let arrow = osc.transfer_to_image_bitmap().unwrap();
+
+		let mut rng = Random::new();
+		let sx = (rng.rand(250) + 500) as u32;
+		let sy = (rng.rand(250) + 500) as u32;
+		let osc = OffscreenCanvas::new(sx, sy).expect("OffscreenCanvas creation error");
+		let sx = sx as f64;
+		let sy = sy as f64;
+		let context = osc.get_context("2d")
+			.unwrap()
+			.unwrap()
+			.dyn_into::<web_sys::OffscreenCanvasRenderingContext2d>()
+			.unwrap();
+		context.set_fill_style(&JsValue::from_str("#000000"));
+		context.fill_rect(0.0, 0.0, sx, sy);
+
+		let num = rng.rand(50) + 100;
+		for _ in 0..num {
+			context.set_fill_style(&JsValue::from_str(match rng.nextbits(2) {
+				0 => "#666666",
+				1 => "#999999",
+				2 => "#cccccc",
+				_ => "#ffffff"
+			}));
+			context.fill_rect(rng.nextfloat() * sx, rng.nextfloat() * sy, 2.0, 2.0);
+		}
+
+/*		context.set_fill_style(&JsValue::from_str("#ffffff"));
+		context.fill_rect(10.0, 10.0, 2.0, 2.0);
+		context.fill_rect(20.0, 20.0, 2.0, 2.0);
+		context.fill_rect(30.0, 30.0, 2.0, 2.0);*/
+		let bg = osc.transfer_to_image_bitmap().unwrap();
 
 		Self {
 			engine: Rc::new(RefCell::new(eng)),
-			arrow: Rc::new(bmp),
+			arrow: Rc::new(arrow),
+			background: Rc::new(bg),
 			config: md,
 			root: root
 		}
 	}
 
-	fn draw(canvas: &web_sys::HtmlCanvasElement, engine: &GameEngine, arrow: &ImageBitmap, opacity: i32) {
+	fn draw(canvas: &web_sys::HtmlCanvasElement, engine: &GameEngine, background: &ImageBitmap, arrow: &ImageBitmap, opacity: i32) {
 		let context = canvas
 			.get_context("2d")
 			.unwrap()
@@ -98,31 +132,39 @@ impl GameView {
 		let cw = canvas.width().into();
 		let ch = canvas.height().into();
 		let _ = context.reset_transform();
-		context.set_fill_style(&JsValue::from_str("#000000"));
-		context.fill_rect(0.0, 0.0, cw, ch);
+		// context.set_fill_style(&JsValue::from_str("#000000"));
+		// context.fill_rect(0.0, 0.0, cw, ch);
+		let pat = context.create_pattern_with_image_bitmap(background, "repeat").unwrap().unwrap();
 
 		if engine.scrollable() {
 			let vpos = engine.viewport_pos();
+			let vx = vpos.x();
+			let vy = vpos.y();
 
-			if vpos.x() < 0.0 {
-				shape!(context, "#a83e3e", vec![pt!(0,0), pt!(-vpos.x(),0), pt!(-vpos.x(),ch), pt!(0,ch)]);
-			}
-			if vpos.y() < 0.0 {
-				shape!(context, "#a83e3e", vec![pt!(0,0), pt!(0,-vpos.y()), pt!(cw,-vpos.y()), pt!(cw,0)]);
-			}
-			let out = vpos.x() + cw - engine.area_width();
-			if out > 0.0 {
-				shape!(context, "#a83e3e", vec![pt!(cw-out,0), pt!(cw,0), pt!(cw,ch), pt!(cw-out,ch)]);
-			}
-			let out = vpos.y() + ch - engine.area_height();
-			if out > 0.0 {
-				shape!(context, "#a83e3e", vec![pt!(0,ch-out), pt!(0,ch), pt!(cw,ch), pt!(cw,ch-out)]);
-			}
+			let _ = context.translate(-vx, -vy);
+			context.set_fill_style(&pat);
+			context.fill_rect(vx, vy, cw, ch);
 
-			let _ = context.translate(-vpos.x(), -vpos.y());
+			if vx < 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(vx,vy), pt!(0,vy), pt!(0,ch+vy), pt!(vx,ch+vy)]);
+			}
+			if vy < 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(vx,vy), pt!(vx,0), pt!(cw+vx,0), pt!(cw+vx,vy)]);
+			}
+			let out = vx + cw - engine.area_width();
+			if out > 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(cw-out+vx,vy), pt!(cw+vx,vy), pt!(cw+vx,ch+vy), pt!(cw-out+vx,ch+vy)]);
+			}
+			let out = vy + ch - engine.area_height();
+			if out > 0.0 {
+				shape!(context, "#a83e3e", vec![pt!(vx,ch-out+vy), pt!(vx,ch+vy), pt!(cw+vx,ch+vy), pt!(cw+vx,ch-out+vy)]);
+			}
+		} else {
+			context.set_fill_style(&pat);
+			context.fill_rect(0.0, 0.0, cw, ch);
 		}
 
-		let step = engine.get_step();
+		let wind_step = engine.get_wind_step();
 		engine.iter_winds(|w,trig| {
 			context.save();
 			stroke!(context, "#12fff7", w.shape());
@@ -130,12 +172,12 @@ impl GameView {
 			let pat = context.create_pattern_with_image_bitmap(arrow, "repeat").unwrap().unwrap();
 			let dir = w.direction();
 			let _ = context.rotate(trig.rad(dir));
-			if step > 0 {
+			if wind_step > 0 {
 				let _ = context.translate(10.0, 0.0);
 			}
 			let shp : Vec<Point> = w.shape().iter().map(|p| {
 				let mut p = trig.rot(p, -dir);
-				if step > 0 {
+				if wind_step > 0 {
 					p.add(&pt!(-10.0,0.0));
 				}
 				p
@@ -549,6 +591,7 @@ impl GameView {
 
 		let engref = Rc::clone(&self.engine);
 		let arrow = Rc::clone(&self.arrow);
+		let background = Rc::clone(&self.background);
 		let canvas = canvas();
 
 		let mut fading = -1;
@@ -584,7 +627,7 @@ impl GameView {
 				}
 			}
 
-			Self::draw(&canvas, &engine, &arrow, 100 - fading);
+			Self::draw(&canvas, &engine, &background, &arrow, 100 - fading);
 			request_animation_frame(animf.borrow().as_ref().unwrap());
 		}));
 

@@ -33,12 +33,21 @@ impl Random {
 		self.next() & mask
 	}
 	pub fn nextfloat(&mut self) -> Fpt {
-		self.next() as Fpt / 255.0
+		let r16 = (self.next() as u32) |
+			(self.next() as u32)<<8;
+		return r16 as Fpt / u16::MAX as Fpt;
 	}
 	pub fn rand(&mut self, max: i32) -> i32 {
 		if max <= 0 {
 			return 0;
 		}
 		(self.nextfloat() * (max as Fpt)) as i32
+	}
+	pub fn sign(&mut self) -> Fpt {
+		if self.nextbits(1) == 0 {
+			1.0
+		} else {
+			-1.0
+		}
 	}
 }

@@ -4,6 +4,68 @@ use crate::common::*;
 use crate::geom::Point;
 use crate::pt;
 use crate::engine::Wind;
+use crate::geom::Trig;
+
+enum MotionImpl {
+	Static,
+	XCos
+}
+
+struct Wall {
+	shape: Vec<Point>,
+	motion: MotionImpl,
+	ampl: Fpt,
+	freq: i32,
+	step: u32
+}
+impl Wall {
+	pub fn fixed(shape: Vec<Point>) -> Self {
+		Self {
+			shape: shape,
+			motion: MotionImpl::Static,
+			ampl: 0.0,
+			freq: 0,
+			step: 0,
+		}
+	}
+
+	pub fn xcos(shape: Vec<Point>, ampl: Fpt, freq: u8) -> Self {
+		let f = match freq {
+			1 => 1,
+			2 => 2,
+			3 => 3,
+			4 => 4,
+			5 => 5,
+			6 => 6,
+			_ => 4
+		};
+
+		Self {
+			shape: shape,
+			motion: MotionImpl::XCos,
+			ampl: ampl,
+			freq: f,
+			step: 360u32 / f as u32,
+		}
+	}
+
+	pub fn shape(&self, gstep: u32, tr: &Trig) -> Vec<Point> {
+		match self.motion {
+			MotionImpl::Static => self.shape.clone(),
+			MotionImpl::XCos => {
+				let dx = tr.cos(self.freq * (gstep % self.step) as i32) * self.ampl;
+				self.shape.iter().map(|p| pt!(p.x()+dx, p.y())).collect()
+			}
+		}
+	}
+}
+
+macro_rules! wall {
+	( $($shape:expr),* ) => { Wall::fixed( vec!( $($shape),* ) ) }
+}
+macro_rules! xcwall {
+	( $($shape:expr),* ) => { Wall::xcos( vec!( $($shape),* ), 20.0, 4 ) }
+}
 
 pub struct GameData {
 	pub area: Point,
@@ -25,8 +87,8 @@ pub struct GameData {
 	pub thrust_pow: Fpt,
 	pub gravity: Point,
 	pub friction: Fpt,
-	pub walls: Vec<Vec<Point>>,
-	pub winds: Vec<Wind>
+	walls: Vec<Wall>,
+	pub winds: Vec<Wind>,
 }
 
 impl GameData {
@@ -232,58 +294,62 @@ impl GameData {
 			gravity: Point::new(0.0, 0.06 * grav),
 			friction: fr,
 			winds: vec!(),
-			walls: vec!(vec!(
+			walls: vec!(wall!(
 				pt!(0,80),
 				pt!(10,80),
 				pt!(10,400),
 				pt!(0,400)
-			),vec!(
+			),wall!(
 				pt!(10,280),
 				pt!(280,280),
 				pt!(290,350),
 				pt!(10,400)
-			),vec!(
+			),wall!(
 				pt!(75,80),
 				pt!(75,200),
 				pt!(100,200),
-				pt!(100,80),
-			),vec!(
+				pt!(100,80)
+			),wall!(
 				pt!(100,0),
 				pt!(100,200),
 				pt!(150,200),
-				pt!(170,0),
-			),vec!(
+				pt!(170,0)
+			),wall!(
 				pt!(215,350),
 				pt!(240,80),
 				pt!(260,80),
 				pt!(290,110),
-				pt!(290,350),
-			),vec!(
+				pt!(290,350)
+			),wall!(
 				pt!(350,410),
 				pt!(85,460),
 				pt!(85,550),
-				pt!(350,550),
-			),vec!(
+				pt!(350,550)
+			),wall!(
 				pt!(85,550),
 				pt!(100,570),
 				pt!(190,570),
-				pt!(200,550),
-			),vec!(
+				pt!(200,550)
+			),wall!(
 				pt!(0,400),
 				pt!(10,400),
 				pt!(30,700),
-				pt!(0,700),
-			),vec!(
+				pt!(0,700)
+			),wall!(
 				pt!(10,640),
 				pt!(200,640),
 				pt!(200,700),
-				pt!(10,700),
+				pt!(10,700)
 			))
 		}
 	}
 
-	fn pillar(x:u32, y:u32, sz:u32) -> Vec<Point> {
-		vec!(pt!(x-sz,y),pt!(x,y-sz),pt!(x+sz,y),pt!(x,y+sz))
+	fn pillar(x:u32, y:u32, sz:u32) -> Wall {
+		wall!(pt!(x-sz,y),pt!(x,y-sz),pt!(x+sz,y),pt!(x,y+sz))
+	}
+
+	fn moving_pillar(x:u32, y:u32, sz:u32) -> Wall {
+		xcwall!(pt!(x-sz,y),pt!(x,y-sz),pt!(x+sz,y),pt!(x,y+sz))
 	}
 
 	pub fn windy_pillars(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
@@ -359,7 +425,7 @@ impl GameData {
 			gravity: Point::new(0.0, 0.06 * grav),
 			friction: fr,
 			winds: vec!(),
-			walls: vec!(vec!(
+			walls: vec!(wall!(
 				pt!(0,50),
 				pt!(50,90),
 				pt!(100,80),
@@ -372,8 +438,8 @@ impl GameData {
 				pt!(180,230),
 				pt!(120,250),
 				pt!(80,240),
-				pt!(0,260),
-			),vec!(
+				pt!(0,260)
+			),wall!(
 				pt!(wi, 300),
 				pt!(wi - 50, 320),
 				pt!(wi - 100, 330),
@@ -383,7 +449,7 @@ impl GameData {
 				pt!(wi - 205, 390),
 				pt!(wi - 160, 400),
 				pt!(wi - 50, 420),
-				pt!(wi, 425),
+				pt!(wi, 425)
 			))
 		}
 	}
@@ -448,12 +514,12 @@ impl GameData {
 						pt!(60,570)
 					),0.08,90)
 					),
-			walls: vec!(vec!(
+			walls: vec!(wall!(
 				pt!(50,200),
 				pt!(60,200),
 				pt!(60,580),
 				pt!(50,580)
-			),vec!(
+			),wall!(
 				pt!(190,200),
 				pt!(200,200),
 				pt!(200,580),
@@ -492,32 +558,32 @@ impl GameData {
 			gravity: Point::new(0.0, 0.06 * grav),
 			friction: fr,
 			winds: vec!(),
-			walls: vec!(vec!(
+			walls: vec!(wall!(
 				pt!(20,40),
 				pt!(50,50),
 				pt!(20,60)
-			),vec!(
+			),wall!(
 				pt!(340,40),
 				pt!(310,50),
 				pt!(340,60)
 			),
 
-			vec!( pt!(80,160), pt!(90,130), pt!(100,160) ),
-			vec!( pt!(260,160), pt!(270,130), pt!(280,160) ),
+			wall!( pt!(80,160), pt!(90,130), pt!(100,160) ),
+			wall!( pt!(260,160), pt!(270,130), pt!(280,160) ),
 
-			vec!( pt!(20,260), pt!(30,230), pt!(40,260) ),
-			vec!( pt!(170,260), pt!(180,230), pt!(190,260) ),
-			vec!( pt!(320,260), pt!(330,230), pt!(340,260) ),
+			wall!( pt!(20,260), pt!(30,230), pt!(40,260) ),
+			wall!( pt!(170,260), pt!(180,230), pt!(190,260) ),
+			wall!( pt!(320,260), pt!(330,230), pt!(340,260) ),
 
-			vec!( pt!(80,360), pt!(90,330), pt!(100,360) ),
-			vec!( pt!(260,360), pt!(270,330), pt!(280,360) ),
+			wall!( pt!(80,360), pt!(90,330), pt!(100,360) ),
+			wall!( pt!(260,360), pt!(270,330), pt!(280,360) ),
 
-			vec!( pt!(20,460), pt!(30,430), pt!(40,460) ),
-			vec!( pt!(170,460), pt!(180,430), pt!(190,460) ),
-			vec!( pt!(320,460), pt!(330,430), pt!(340,460) ),
+			wall!( pt!(20,460), pt!(30,430), pt!(40,460) ),
+			wall!( pt!(170,460), pt!(180,430), pt!(190,460) ),
+			wall!( pt!(320,460), pt!(330,430), pt!(340,460) ),
 
-			vec!( pt!(80,560), pt!(90,530), pt!(100,560) ),
-			vec!( pt!(260,560), pt!(270,530), pt!(280,560) ),
+			wall!( pt!(80,560), pt!(90,530), pt!(100,560) ),
+			wall!( pt!(260,560), pt!(270,530), pt!(280,560) ),
 			),
 		}
 	}
@@ -560,13 +626,13 @@ impl GameData {
 				Self::pillar(470,400,25),
 				Self::pillar(570,400,25),
 
-				Self::pillar( 20,600,20),
-				Self::pillar(120,600,20),
-				Self::pillar(220,600,20),
-				Self::pillar(320,600,20),
-				Self::pillar(420,600,20),
-				Self::pillar(520,600,20),
-				Self::pillar(620,600,20),
+				Self::moving_pillar( 20,600,20),
+				Self::moving_pillar(120,600,20),
+				Self::moving_pillar(220,600,20),
+				Self::moving_pillar(320,600,20),
+				Self::moving_pillar(420,600,20),
+				Self::moving_pillar(520,600,20),
+				Self::moving_pillar(620,600,20),
 
 				Self::pillar( 70,800,25),
 				Self::pillar(170,800,25),
@@ -574,12 +640,13 @@ impl GameData {
 				Self::pillar(370,800,25),
 				Self::pillar(470,800,25),
 				Self::pillar(570,800,25),
-
-
 			)
 		}
 	}
 
+	pub fn get_walls(&self, gstep: u32, tr: &Trig) -> Vec<Vec<Point>> {
+		self.walls.iter().map(|wall| wall.shape(gstep, tr)).collect()
+	}
 
 }
 

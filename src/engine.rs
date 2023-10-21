@@ -142,8 +142,9 @@ pub struct GameEngine {
 	blownup: bool,
 	rng: Random,
 	trig: Trig,
-	draw_step: u32,
+	step: u32,
 	viewport_pos: Option<Point>,
+	walls: Vec<Vec<Point>>,
 	config: GameData
 }
 impl GameEngine {
@@ -164,7 +165,8 @@ impl GameEngine {
 			rng: Random::new(),
 			blownup: false,
 			trig: Trig::new(),
-			draw_step: 0u32,
+			step: 0u32,
+			walls: vec!(),
 			viewport_pos: match &cfg.viewport_pos0 {
 				None => None,
 				Some(x) => Some(x.clone())
@@ -175,6 +177,9 @@ impl GameEngine {
 			let ast = rv.new_asteroid();
 			rv.asteroids.push(ast);
 		}
+
+		rv.walls = rv.config.get_walls(rv.step, &rv.trig);
+
 		rv
 	}
 	pub fn fuel_warn(&self) -> bool {
@@ -312,15 +317,16 @@ impl GameEngine {
 		}
 	}
 
-	pub fn get_step(&self) -> u32 {
-		if self.draw_step < 15 {
+	pub fn get_wind_step(&self) -> u32 {
+		if self.step % 30 < 15 {
 			return 0u32;
 		}
 		1u32
 	}
 
 	pub fn move_step(&mut self) {
-		self.draw_step = (self.draw_step + 1) % 30;
+		self.step = self.step + 1;
+		self.walls = self.config.get_walls(self.step, &self.trig);
 
 		for a in self.asteroids.iter_mut() {
 			a.move_step(&self.config.area);
@@ -391,7 +397,7 @@ impl GameEngine {
 		rv
 	}
 	pub fn obs_shape(&self) -> &Vec<Vec<Point>> {
-		&self.config.walls
+		&self.walls
 	}
 
 	pub fn iter_winds<F>(&self, mut f: F) where F: FnMut(&Wind, &Trig) -> () {
@@ -422,8 +428,8 @@ impl GameEngine {
 			self.config.asteroid_pos0.y() + self.rng.rand(self.config.asteroid_area.y() as i32) as Fpt
 		);
 		let dp = Point::new(
-			self.rng.nextfloat() + 0.2,
-			self.rng.nextfloat() + 0.2
+			self.rng.sign() * (self.rng.nextfloat() + 0.2),
+			self.rng.sign() * (self.rng.nextfloat() + 0.2)
 		);
 		let dr = self.rng.nextbits(3) as i32 - 4;
 		Asteroid {
