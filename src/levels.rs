@@ -8,29 +8,34 @@ use crate::geom::Trig;
 
 enum MotionImpl {
 	Static,
+	Rot,
 	XCos
 }
 
 struct Wall {
 	shape: Vec<Point>,
+	base: Point,
 	motion: MotionImpl,
 	ampl: Fpt,
 	freq: i32,
-	step: u32
+	step: u32,
+	init: u32,
 }
 impl Wall {
 	pub fn fixed(shape: Vec<Point>) -> Self {
 		Self {
 			shape: shape,
 			motion: MotionImpl::Static,
+			base: pt!(0,0),
 			ampl: 0.0,
 			freq: 0,
 			step: 0,
+			init: 0,
 		}
 	}
 
-	pub fn xcos(shape: Vec<Point>, ampl: Fpt, freq: u8) -> Self {
-		let f = match freq {
+	fn normalize_freq(freq: u8) -> u8 {
+		match freq {
 			1 => 1,
 			2 => 2,
 			3 => 3,
@@ -38,14 +43,31 @@ impl Wall {
 			5 => 5,
 			6 => 6,
 			_ => 4
-		};
+		}
+	}
 
+	pub fn xcos(shape: Vec<Point>, ampl: Fpt, freq: u8) -> Self {
+		let f = Self::normalize_freq(freq);
 		Self {
 			shape: shape,
 			motion: MotionImpl::XCos,
+			base: pt!(0,0),
 			ampl: ampl,
-			freq: f,
+			freq: f as i32,
 			step: 360u32 / f as u32,
+			init: 0,
+		}
+	}
+	pub fn rotating(base: Point, shape: Vec<Point>, init: u32, ccw: bool, freq: u8) -> Self {
+		let f = Self::normalize_freq(freq);
+		Self {
+			shape: shape,
+			motion: MotionImpl::Rot,
+			base: base,
+			ampl: if ccw { -1.0 } else { 1.0 },
+			freq: f as i32,
+			step: 360u32 / f as u32,
+			init,
 		}
 	}
 
@@ -55,6 +77,15 @@ impl Wall {
 			MotionImpl::XCos => {
 				let dx = tr.cos(self.freq * (gstep % self.step) as i32) * self.ampl;
 				self.shape.iter().map(|p| pt!(p.x()+dx, p.y())).collect()
+			},
+			MotionImpl::Rot => {
+				let f = if self.ampl > 0.0 { self.freq } else { 360 - self.freq };
+				let cos = tr.cos(f * ((self.init+gstep) % self.step) as i32);
+				let sin = tr.sin(f * ((self.init+gstep) % self.step) as i32);
+				self.shape.iter().map(|p| pt!(
+						p.x()*cos - p.y()*sin + self.base.x(),
+						p.x()*sin + p.y()*cos + self.base.y()
+				)).collect()
 			}
 		}
 	}
@@ -428,21 +459,47 @@ impl GameData {
 			walls: vec!(wall!(
 				pt!(0,50),
 				pt!(50,90),
+				pt!(0,120)
+			),wall!(
+				pt!(50,90),
 				pt!(100,80),
 				pt!(130,90),
 				pt!(128,100),
+				pt!(70,130)
+			),wall!(
+				pt!(128,100),
 				pt!(145,115),
 				pt!(155,145),
-				pt!(175,175),
-				pt!(215,210),
-				pt!(180,230),
+				pt!(125,150)
+			),wall!(
+				pt!(115,145),
+				pt!(155,145),
+				pt!(185,165),
+				pt!(190,190),
+				pt!(180,210),
 				pt!(120,250),
+				pt!(80,240)
+			),wall!(
+				pt!(0,80),
 				pt!(80,240),
 				pt!(0,260)
 			),wall!(
+				pt!(0,90),
+				pt!(60,90),
+				pt!(128,100),
+				pt!(128,240),
+				pt!(0,240)
+			),wall!(
+				pt!(wi, 410),
 				pt!(wi, 300),
-				pt!(wi - 50, 320),
+				pt!(wi - 55, 323)
+			),wall!(
+				pt!(wi, 400),
+				pt!(wi - 45, 320),
 				pt!(wi - 100, 330),
+				pt!(wi - 125, 355)
+			),wall!(
+				pt!(wi, 400),
 				pt!(wi - 120, 350),
 				pt!(wi - 175, 360),
 				pt!(wi - 220, 370),
@@ -587,6 +644,7 @@ impl GameData {
 			),
 		}
 	}
+
 	pub fn huge(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
 		let wi = 640;
 		let w = wi as Fpt;
@@ -641,6 +699,60 @@ impl GameData {
 				Self::pillar(470,800,25),
 				Self::pillar(570,800,25),
 			)
+		}
+	}
+
+	fn gear(pos: Point, ccw: bool, init: u32) -> Wall {
+		Wall::rotating(pos,
+			vec!(
+				pt!(-5,80),pt!(5,80),
+				pt!(5,-80),pt!(-5,-80),
+			), init, ccw, 1)
+	}
+
+	pub fn gears(ast: u32, thrust: u32, fuel: u32, gravity: u32, fric: u32) -> Self {
+		let wi = 360;
+		let w = wi as Fpt;
+		let h = 700 as Fpt;
+		let na = Self::ast_default(ast);
+		let f = Self::fuel_increased(fuel);
+		let fr = Self::friction_default(fric);
+		let th = Self::thrust_default(thrust);
+		let grav = Self::gravity_default(gravity);
+
+		Self {
+			area: Point::new(w,h),
+			viewport: None, viewport_pos0: None,
+			pos0: Point::new(180.0, 40.0),
+			speed0: Point::new(0.0, 0.0),
+			target_y: 650.0,
+			target_x0: 150.0,
+			target_x1: 210.0,
+			num_asteroids: na,
+			asteroid_pos0: Point::new(0.0, 120.0),
+			asteroid_area: Point::new(w, 700.0),
+			levelling_rot: 15,
+			levelling_speed_x: 3.5,
+			levelling_speed_y: 2.5,
+			initial_fuel: f,
+			full_fuel: max(f,750) as Fpt,
+			thrust_pow: th,
+			gravity: Point::new(0.0, 0.06 * grav),
+			friction: fr,
+			winds: vec!(),
+			walls: vec!(
+				Self::gear(pt!(90,250), false, 0),
+				Self::gear(pt!(90,250), false, 90),
+
+				Self::gear(pt!(wi-90,250), true, 45),
+				Self::gear(pt!(wi-90,250), true, 135),
+
+				Self::gear(pt!(90,500), true, 15),
+				Self::gear(pt!(90,500), true, 105),
+
+				Self::gear(pt!(wi-90,500), false, 60),
+				Self::gear(pt!(wi-90,500), false, 150),
+			),
 		}
 	}
 

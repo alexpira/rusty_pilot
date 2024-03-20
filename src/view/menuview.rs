@@ -96,7 +96,7 @@ impl MenuView {
 	}
 	pub fn rand_data(rng: &mut Random) -> MenuViewData {
 		MenuViewData {
-			map: rng.rand(8) as u32,
+			map: rng.rand(9) as u32,
 			gravity: rng.rand(5) as u32,
 			friction: rng.rand(5) as u32,
 			asteroids: rng.rand(5) as u32,
@@ -115,6 +115,7 @@ impl MenuView {
 			5 => "<span>Map: CHOICE</span>",
 			6 => "<span>Map: UP</span>",
 			7 => "<span>Map: HUGE</span>",
+			8 => "<span>Map: GEARS</span>",
 			_ => "<span>Map: SIMPLE</span>",
 		}
 	}
@@ -173,7 +174,7 @@ impl MenuView {
 			event.prevent_default();
 			let mut data = data.borrow_mut();
 			let v = (*data).map;
-			let v = (v + 1) % 8;
+			let v = (v + 1) % 9;
 			(*data).map = v;
 			elem::<HtmlElement>("map").set_inner_html(Self::label_map(v));
         });
@@ -261,6 +262,7 @@ impl MenuView {
 				5 => GameData::choice(ast, th, fuel, gravity, fr),
 				6 => GameData::up(ast, th, fuel, gravity, fr),
 				7 => GameData::huge(ast, th, fuel, gravity, fr),
+				8 => GameData::gears(ast, th, fuel, gravity, fr),
 				_ => GameData::simple(ast, th, fuel, gravity, fr),
 			};
 
